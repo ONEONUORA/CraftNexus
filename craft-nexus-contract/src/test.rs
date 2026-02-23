@@ -163,3 +163,36 @@ fn test_get_escrow_not_found() {
     let (client, _, _, _, _) = setup_test(&env);
     client.get_escrow(&999);
 }
+
+#[test]
+#[should_panic(expected = "Amount must be positive")]
+fn test_create_escrow_zero_amount() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, buyer, seller, token_id, token_admin) = setup_test(&env);
+    
+    token_admin.mint(&buyer, &1000);
+    client.create_escrow(&buyer, &seller, &token_id, &0, &1, &None);
+}
+
+#[test]
+#[should_panic(expected = "Amount must be positive")]
+fn test_create_escrow_negative_amount() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, buyer, seller, token_id, token_admin) = setup_test(&env);
+    
+    token_admin.mint(&buyer, &1000);
+    client.create_escrow(&buyer, &seller, &token_id, &-100, &1, &None);
+}
+
+#[test]
+#[should_panic(expected = "Buyer and seller must be different")]
+fn test_create_escrow_same_buyer_seller() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, buyer, _, token_id, token_admin) = setup_test(&env);
+    
+    token_admin.mint(&buyer, &1000);
+    client.create_escrow(&buyer, &buyer, &token_id, &500, &1, &None);
+}
