@@ -54,6 +54,12 @@ impl EscrowContract {
     ) -> Escrow {
         buyer.require_auth();
         
+        // Validate amount is positive
+        assert!(amount > 0, "Amount must be positive");
+        
+        // Validate buyer and seller are different
+        assert!(buyer != seller, "Buyer and seller must be different");
+        
         // Default to 7 days if not specified
         let window = release_window.unwrap_or(604800u64);
         let created_at = env.ledger().timestamp();
