@@ -69,7 +69,7 @@ export class StellarPaymentService {
         destination: recipientPublicKey,
         asset: usdcAsset,
         amount: amount,
-      }) as any);
+      }));
 
       if (orderId) {
         transaction.addMemo(Memo.text(`ORDER:${orderId}`));
@@ -84,7 +84,7 @@ export class StellarPaymentService {
       builtTx.sign(senderKeypair);
 
       // Submit transaction
-      const result = await this.server.submitTransaction(builtTx as any);
+      const result = await this.server.submitTransaction(builtTx);
       return result.hash;
     } catch (error) {
       console.error("Payment failed:", error);
@@ -123,7 +123,7 @@ export class StellarPaymentService {
         destination: sellerPublicKey,
         asset: usdcAsset,
         amount: sellerAmount,
-      }) as any);
+      }));
 
       // Add commission payment if platform wallet is configured
       if (PLATFORM_COMMISSION_WALLET) {
@@ -131,7 +131,7 @@ export class StellarPaymentService {
           destination: PLATFORM_COMMISSION_WALLET,
           asset: usdcAsset,
           amount: commissionAmount,
-        }) as any);
+        }));
       }
 
       const transaction = transactionBuilder
@@ -139,11 +139,9 @@ export class StellarPaymentService {
         .setTimeout(30)
         .build();
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      transaction.sign(buyerKeypair as any);
+      transaction.sign(buyerKeypair);
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const result = await this.server.submitTransaction(transaction as any);
+      const result = await this.server.submitTransaction(transaction);
       return {
         paymentHash: result.hash,
       };

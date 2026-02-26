@@ -112,7 +112,7 @@ export async function invokeEscrowCreate(
   }
 }
 
-export interface CreateEscrowParams {
+export interface ContractEscrowParams {
   buyer: string;
   seller: string;
   token: string; // USDC token contract address
@@ -150,7 +150,8 @@ export class EscrowContractService {
   /**
    * Create escrow for an order
    */
-  async createEscrow(params: CreateEscrowParams): Promise<string> {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  async createEscrow(params: ContractEscrowParams): Promise<string> {
     if (!ESCROW_CONTRACT_ADDRESS) {
       throw new Error("Escrow contract not deployed");
     }
@@ -184,7 +185,8 @@ export class EscrowContractService {
   /**
    * Release funds to seller
    */
-  async releaseFunds(orderId: number, signerSecret: string): Promise<string> {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  async releaseFunds(_orderId: number, _signerSecret: string): Promise<string> {
     if (!ESCROW_CONTRACT_ADDRESS) {
       throw new Error("Escrow contract not deployed");
     }
