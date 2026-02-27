@@ -490,20 +490,27 @@ Check if escrow can be auto-released.
 ## Prerequisites
 
 - Rust 1.70.0 or later
-- Stellar Soroban CLI
+- Stellar CLI (installation instructions below)
 - Stellar account with testnet XLM (for deployment)
 
-## Installation
+## Quick Start
 
-### Install Stellar CLI
+### 1. Install Stellar CLI
+
+Run the automated installation script:
 
 ```bash
-cargo install --locked stellar-cli
+./scripts/install-stellar-cli.sh
 ```
 
-### Install Rust Target
+This will:
+- Install Stellar CLI with optimizations
+- Verify the installation
+- Ensure WASM target is configured
 
+**Manual Installation (Alternative):**
 ```bash
+cargo install --locked stellar-cli
 rustup target add wasm32-unknown-unknown
 ```
 
@@ -514,7 +521,11 @@ rustup target add wasm32-unknown-unknown
 ### Build All Contracts
 
 ```bash
-cd craft-nexus-contract
+./scripts/build.sh
+```
+
+Or manually:
+```bash
 stellar contract build
 ```
 
@@ -551,8 +562,16 @@ To deploy contracts, you will need:
 A deployment script is provided in the frontend repository:
 
 ```bash
-# From the craft-nexus (frontend) directory
-./scripts/deploy-contract.sh [testnet|mainnet] <YOUR_SECRET_KEY>
+./scripts/deploy.sh [testnet|mainnet] <YOUR_IDENTITY_NAME>
+```
+
+Example:
+```bash
+# Deploy to testnet using identity 'alice'
+./scripts/deploy.sh testnet alice
+
+# Deploy to mainnet using identity 'mainnet-deployer'
+./scripts/deploy.sh mainnet mainnet-deployer
 ```
 
 The script will:
