@@ -1,7 +1,7 @@
 #![cfg(test)]
 
 use super::*;
-use soroban_sdk::{testutils::{Address as _, Ledger}, Address, Env, token};
+use soroban_sdk::{testutils::{Address as _, Events, Ledger}, vec, Address, Env, IntoVal, Symbol, token};
 
 fn setup_test(env: &Env) -> (EscrowContractClient<'static>, Address, Address, Address, token::StellarAssetClient<'static>, Address) {
     let contract_id = env.register_contract(None, EscrowContract);
@@ -44,6 +44,14 @@ fn test_create_escrow_success() {
     
     let stored_escrow = client.get_escrow(&order_id);
     assert_eq!(stored_escrow, escrow);
+
+    // Verify event
+    let events = env.events().all();
+    assert!(events.len() > 0, "No events emitted");
+    let last_event = events.last().unwrap();
+    assert_eq!(last_event.0, client.address);
+    // Topics: ["escrow_created", escrow_id]
+    assert_eq!(last_event.1, vec![&env, Symbol::new(&env, "escrow_created").into_val(&env), (order_id as u64).into_val(&env)]);
 }
 
 #[test]
@@ -81,6 +89,13 @@ fn test_release_funds_success() {
     
     // Check total fees collected
     assert_eq!(client.get_total_fees_collected(), 25);
+
+    // Verify event
+    let events = env.events().all();
+    let last_event = events.last().unwrap();
+    assert_eq!(last_event.0, client.address);
+    // Topics: ["funds_released", escrow_id]
+    assert_eq!(last_event.1, vec![&env, Symbol::new(&env, "funds_released").into_val(&env), 1u64.into_val(&env)]);
 }
 
 #[test]
@@ -122,6 +137,13 @@ fn test_auto_release_success_after_window() {
     assert_eq!(token_client.balance(&seller), 475);
     // Platform receives 25 (5% fee)
     assert_eq!(token_client.balance(&platform_wallet), 25);
+
+    // Verify event
+    let events = env.events().all();
+    let last_event = events.last().unwrap();
+    assert_eq!(last_event.0, client.address);
+    // Topics: ["funds_released", escrow_id]
+    assert_eq!(last_event.1, vec![&env, Symbol::new(&env, "funds_released").into_val(&env), 1u64.into_val(&env)]);
 }
 
 #[test]
@@ -154,6 +176,35 @@ fn test_refund_success_by_buyer() {
     
     let token_client = token::Client::new(&env, &token_id);
     assert_eq!(token_client.balance(&buyer), 1000);
+
+    // Verify event
+    let events = env.events().all();
+    let last_event = events.last().unwrap();
+    assert_eq!(last_event.0, client.address);
+    // Topics: ["funds_refunded", escrow_id]
+    assert_eq!(last_event.1, vec![&env, Symbol::new(&env, "funds_refunded").into_val(&env), 1u64.into_val(&env)]);
+}
+
+#[test]
+fn test_dispute_escrow_success() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, buyer, seller, token_id, token_admin, _) = setup_test(&env);
+    
+    token_admin.mint(&buyer, &1000);
+    client.create_escrow(&buyer, &seller, &token_id, &500, &1, &None);
+    
+    client.dispute_escrow(&1, &buyer);
+    
+    let escrow = client.get_escrow(&1);
+    assert_eq!(escrow.status, EscrowStatus::Disputed);
+
+    // Verify event
+    let events = env.events().all();
+    let last_event = events.last().unwrap();
+    assert_eq!(last_event.0, client.address);
+    // Topics: ["escrow_disputed", escrow_id]
+    assert_eq!(last_event.1, vec![&env, Symbol::new(&env, "escrow_disputed").into_val(&env), 1u64.into_val(&env)]);
 }
 
 #[test]

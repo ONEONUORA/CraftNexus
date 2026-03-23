@@ -38,6 +38,37 @@ pub struct Escrow {
     pub release_window: u64, // Time in seconds before auto-release
 }
 
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct EscrowCreatedEvent {
+    pub escrow_id: u64,
+    pub buyer: Address,
+    pub seller: Address,
+    pub amount: i128,
+    pub token: Address,
+    pub release_window: u32,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct FundsReleasedEvent {
+    pub escrow_id: u64,
+    pub amount: i128,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct FundsRefundedEvent {
+    pub escrow_id: u64,
+    pub amount: i128,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct EscrowDisputedEvent {
+    pub escrow_id: u64,
+}
+
 /// Platform configuration data
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -128,6 +159,16 @@ impl EscrowContract {
         let client = token::Client::new(&env, &token);
         client.transfer(&buyer, &env.current_contract_address(), &amount);
 
+        let event = EscrowCreatedEvent {
+            escrow_id: order_id as u64,
+            buyer: buyer.clone(),
+            seller: seller.clone(),
+            amount,
+            token: token.clone(),
+            release_window: window as u32,
+        };
+        env.events().publish(("escrow_created", order_id as u64), event);
+
         escrow
     }
 
@@ -197,6 +238,14 @@ impl EscrowContract {
         
         // Transfer remaining funds to seller
         token_client.transfer(&env.current_contract_address(), &escrow.seller, &seller_amount);
+
+        env.events().publish(
+            ("funds_released", order_id as u64),
+            FundsReleasedEvent {
+                escrow_id: order_id as u64,
+                amount: escrow.amount,
+            },
+        );
     }
 
     /// Auto-release funds after release window (seller can call)
@@ -257,6 +306,14 @@ impl EscrowContract {
         
         // Transfer remaining funds to seller
         token_client.transfer(&env.current_contract_address(), &escrow.seller, &seller_amount);
+
+        env.events().publish(
+            ("funds_released", order_id as u64),
+            FundsReleasedEvent {
+                escrow_id: order_id as u64,
+                amount: escrow.amount,
+            },
+        );
     }
 
     /// Refund funds to buyer (for disputes or cancellations)
@@ -294,6 +351,14 @@ impl EscrowContract {
         // Refund to buyer
         let client = token::Client::new(&env, &escrow.token);
         client.transfer(&env.current_contract_address(), &escrow.buyer, &escrow.amount);
+
+        env.events().publish(
+            ("funds_refunded", order_id as u64),
+            FundsRefundedEvent {
+                escrow_id: order_id as u64,
+                amount: escrow.amount,
+            },
+        );
     }
 
     /// Get escrow details
@@ -326,6 +391,46 @@ impl EscrowContract {
         let elapsed = current_time - escrow.created_at;
 
         elapsed >= escrow.release_window
+    }
+
+    /// Dispute an escrow
+    /// 
+    /// # Arguments
+    /// * `order_id` - Order identifier
+    /// * `authorized_address` - Address authorized to dispute (buyer or admin)
+    pub fn dispute_escrow(env: Env, order_id: u32, authorized_address: Address) {
+        authorized_address.require_auth();
+
+        let mut escrow: Escrow = env
+            .storage()
+            .persistent()
+            .get(&(ESCROW, order_id))
+            .expect("Escrow not found");
+
+        let config = Self::get_platform_config(&env);
+
+        // Allow buyer or admin to dispute
+        assert!(
+            escrow.buyer == authorized_address || authorized_address == config.admin,
+            "Not authorized to dispute"
+        );
+
+        assert!(
+            escrow.status == EscrowStatus::Pending,
+            "Escrow already processed"
+        );
+
+        escrow.status = EscrowStatus::Disputed;
+        env.storage()
+            .persistent()
+            .set(&(ESCROW, order_id), &escrow);
+
+        env.events().publish(
+            ("escrow_disputed", order_id as u64),
+            EscrowDisputedEvent {
+                escrow_id: order_id as u64,
+            },
+        );
     }
 
     /// Update platform fee percentage (admin only)
