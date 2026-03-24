@@ -7,9 +7,9 @@ use soroban_sdk::{
 mod test;
 
 const ESCROW: Symbol = symbol_short!("ESCROW");
-const PLATFORM_FEE: Symbol = symbol_short!("PLATFORM_FEE");
-const PLATFORM_WALLET: Symbol = symbol_short!("PLAT_WALLET");
-const TOTAL_FEES: Symbol = symbol_short!("TOTAL_FEES");
+const PLATFORM_FEE: Symbol = symbol_short!("PLAT_FEE");
+const PLATFORM_WALLET: Symbol = symbol_short!("PLAT_WAL");
+const TOTAL_FEES: Symbol = symbol_short!("TOT_FEES");
 const ADMIN: Symbol = symbol_short!("ADMIN");
 
 /// Default platform fee in basis points (500 = 5%)
@@ -38,6 +38,37 @@ pub struct Escrow {
     pub release_window: u64, // Time in seconds before auto-release
 }
 
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct EscrowCreatedEvent {
+    pub escrow_id: u64,
+    pub buyer: Address,
+    pub seller: Address,
+    pub amount: i128,
+    pub token: Address,
+    pub release_window: u32,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct FundsReleasedEvent {
+    pub escrow_id: u64,
+    pub amount: i128,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct FundsRefundedEvent {
+    pub escrow_id: u64,
+    pub amount: i128,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct EscrowDisputedEvent {
+    pub escrow_id: u64,
+}
+
 /// Platform configuration data
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -50,35 +81,34 @@ pub struct PlatformConfig {
 #[contract]
 pub struct EscrowContract;
 
-/// Initialize the contract with platform configuration
-/// 
-/// # Arguments
-/// * `platform_wallet` - Address that will receive platform fees
-/// * `admin` - Admin address for managing platform settings
-/// * `platform_fee_bps` - Platform fee in basis points (default 500 = 5%)
-pub fn __init(env: Env, platform_wallet: Address, admin: Address, platform_fee_bps: u32) {
-    admin.require_auth();
-    
-    // Validate fee is within bounds
-    assert!(platform_fee_bps <= MAX_PLATFORM_FEE_BPS, "Fee too high");
-    
-    let config = PlatformConfig {
-        platform_fee_bps,
-        platform_wallet: platform_wallet.clone(),
-        admin: admin.clone(),
-    };
-    
-    env.storage().persistent().set(&PLATFORM_FEE, &config);
-    env.storage().persistent().set(&PLATFORM_WALLET, &platform_wallet);
-    env.storage().persistent().set(&ADMIN, &admin);
-    
-    // Initialize total fees to 0
-    let zero: i128 = 0;
-    env.storage().persistent().set(&TOTAL_FEES, &zero);
-}
-
 #[contractimpl]
 impl EscrowContract {
+    /// Initialize the contract with platform configuration
+    /// 
+    /// # Arguments
+    /// * `platform_wallet` - Address that will receive platform fees
+    /// * `admin` - Admin address for managing platform settings
+    /// * `platform_fee_bps` - Platform fee in basis points (default 500 = 5%)
+    pub fn initialize(env: Env, platform_wallet: Address, admin: Address, platform_fee_bps: u32) {
+        admin.require_auth();
+        
+        // Validate fee is within bounds
+        assert!(platform_fee_bps <= MAX_PLATFORM_FEE_BPS, "Fee too high");
+        
+        let config = PlatformConfig {
+            platform_fee_bps,
+            platform_wallet: platform_wallet.clone(),
+            admin: admin.clone(),
+        };
+        
+        env.storage().persistent().set(&PLATFORM_FEE, &config);
+        env.storage().persistent().set(&PLATFORM_WALLET, &platform_wallet);
+        env.storage().persistent().set(&ADMIN, &admin);
+        
+        // Initialize total fees to 0
+        let zero: i128 = 0;
+        env.storage().persistent().set(&TOTAL_FEES, &zero);
+    }
     /// Create a new escrow for an order
     /// 
     /// # Arguments
@@ -127,6 +157,16 @@ impl EscrowContract {
         // Transfer funds from buyer to contract
         let client = token::Client::new(&env, &token);
         client.transfer(&buyer, &env.current_contract_address(), &amount);
+
+        let event = EscrowCreatedEvent {
+            escrow_id: order_id as u64,
+            buyer: buyer.clone(),
+            seller: seller.clone(),
+            amount,
+            token: token.clone(),
+            release_window: window as u32,
+        };
+        env.events().publish((Symbol::new(&env, "escrow_created"), order_id as u64), event);
 
         escrow
     }
@@ -197,6 +237,14 @@ impl EscrowContract {
         
         // Transfer remaining funds to seller
         token_client.transfer(&env.current_contract_address(), &escrow.seller, &seller_amount);
+
+        env.events().publish(
+            (Symbol::new(&env, "funds_released"), order_id as u64),
+            FundsReleasedEvent {
+                escrow_id: order_id as u64,
+                amount: escrow.amount,
+            },
+        );
     }
 
     /// Auto-release funds after release window (seller can call)
@@ -257,6 +305,14 @@ impl EscrowContract {
         
         // Transfer remaining funds to seller
         token_client.transfer(&env.current_contract_address(), &escrow.seller, &seller_amount);
+
+        env.events().publish(
+            (Symbol::new(&env, "funds_released"), order_id as u64),
+            FundsReleasedEvent {
+                escrow_id: order_id as u64,
+                amount: escrow.amount,
+            },
+        );
     }
 
     /// Refund funds to buyer (for disputes or cancellations)
@@ -294,6 +350,14 @@ impl EscrowContract {
         // Refund to buyer
         let client = token::Client::new(&env, &escrow.token);
         client.transfer(&env.current_contract_address(), &escrow.buyer, &escrow.amount);
+
+        env.events().publish(
+            (Symbol::new(&env, "funds_refunded"), order_id as u64),
+            FundsRefundedEvent {
+                escrow_id: order_id as u64,
+                amount: escrow.amount,
+            },
+        );
     }
 
     /// Get escrow details
@@ -326,6 +390,46 @@ impl EscrowContract {
         let elapsed = current_time - escrow.created_at;
 
         elapsed >= escrow.release_window
+    }
+
+    /// Dispute an escrow
+    /// 
+    /// # Arguments
+    /// * `order_id` - Order identifier
+    /// * `authorized_address` - Address authorized to dispute (buyer or admin)
+    pub fn dispute_escrow(env: Env, order_id: u32, authorized_address: Address) {
+        authorized_address.require_auth();
+
+        let mut escrow: Escrow = env
+            .storage()
+            .persistent()
+            .get(&(ESCROW, order_id))
+            .expect("Escrow not found");
+
+        let config = Self::get_platform_config(&env);
+
+        // Allow buyer or admin to dispute
+        assert!(
+            escrow.buyer == authorized_address || authorized_address == config.admin,
+            "Not authorized to dispute"
+        );
+
+        assert!(
+            escrow.status == EscrowStatus::Pending,
+            "Escrow already processed"
+        );
+
+        escrow.status = EscrowStatus::Disputed;
+        env.storage()
+            .persistent()
+            .set(&(ESCROW, order_id), &escrow);
+
+        env.events().publish(
+            (Symbol::new(&env, "escrow_disputed"), order_id as u64),
+            EscrowDisputedEvent {
+                escrow_id: order_id as u64,
+            },
+        );
     }
 
     /// Update platform fee percentage (admin only)
