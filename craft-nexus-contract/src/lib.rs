@@ -57,6 +57,7 @@ const ADMIN: Symbol = symbol_short!("ADMIN");
 // const DEFAULT_PLATFORM_FEE_BPS: u32 = 500;
 /// Maximum platform fee in basis points (10000 = 100%)
 const MAX_PLATFORM_FEE_BPS: u32 = 1000; // 10% max
+const MAX_TOTAL_RELEASE_WINDOW: u32 = 2592000; // 30 days
 // const CURRENT_VERSION: u32 = 1;
 
 #[contracttype]
@@ -178,6 +179,17 @@ pub struct BatchEscrowCreatedEvent {
     pub seller: Address,
     pub amount: i128,
     pub token: Address,
+    pub timestamp: u64,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct EscrowExtendedEvent {
+    pub escrow_id: u64,
+    pub buyer: Address,
+    pub seller: Address,
+    pub new_release_window: u32,
+    pub additional_seconds: u32,
     pub timestamp: u64,
 }
 
@@ -359,6 +371,13 @@ impl EscrowContract {
     fn emit_batch_funds_released(env: &Env, event: BatchFundsReleasedEvent) {
         env.events().publish(
             (Symbol::new(env, "batch_funds_released"), event.batch_id),
+            event,
+        );
+    }
+
+    fn emit_escrow_extended(env: &Env, event: EscrowExtendedEvent) {
+        env.events().publish(
+            (Symbol::new(env, "escrow_extended"), event.escrow_id),
             event,
         );
     }
@@ -803,6 +822,57 @@ impl EscrowContract {
                 timestamp: env.ledger().timestamp(),
             },
         );
+        Self::exit_reentry_guard(&env);
+    }
+
+    /// Extend the release window for an escrow (only buyer can call)
+    ///
+    /// # Arguments
+    /// * `order_id` - Order identifier
+    /// * `additional_seconds` - Time in seconds to add to the release window
+    pub fn extend_release_window(env: Env, order_id: u32, additional_seconds: u32) {
+        Self::enter_reentry_guard(&env);
+        let escrow_key = (ESCROW, order_id);
+        let escrow_opt = env.storage().persistent().get(&escrow_key);
+
+        if !(escrow_opt.is_some()) {
+            env.panic_with_error(Error::EscrowNotFound);
+        }
+
+        env.storage().persistent().extend_ttl(&escrow_key, 1000, 518400);
+        let mut escrow: Escrow = escrow_opt.unwrap();
+
+        // Only buyer can extend release window
+        escrow.buyer.require_auth();
+
+        if !(escrow.status == EscrowStatus::Active) {
+            env.panic_with_error(Error::InvalidEscrowState);
+        }
+
+        let new_window = escrow
+            .release_window
+            .checked_add(additional_seconds)
+            .unwrap_or(u32::MAX);
+
+        if new_window > MAX_TOTAL_RELEASE_WINDOW {
+            env.panic_with_error(Error::ReleaseWindowTooLong);
+        }
+
+        escrow.release_window = new_window;
+        env.storage().persistent().set(&escrow_key, &escrow);
+
+        Self::emit_escrow_extended(
+            &env,
+            EscrowExtendedEvent {
+                escrow_id: order_id as u64,
+                buyer: escrow.buyer.clone(),
+                seller: escrow.seller.clone(),
+                new_release_window: new_window,
+                additional_seconds,
+                timestamp: env.ledger().timestamp(),
+            },
+        );
+
         Self::exit_reentry_guard(&env);
     }
 
