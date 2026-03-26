@@ -44,6 +44,8 @@ pub enum Error {
     BatchOperationFailed = 14,
     /// Contract is paused
     ContractPaused = 15,
+    /// Re-entrancy detected
+    ReentryDetected = 16,
 }
 
 const ESCROW: Symbol = symbol_short!("ESCROW");
@@ -52,12 +54,11 @@ const PLATFORM_WALLET: Symbol = symbol_short!("PLAT_WAL");
 const TOTAL_FEES: Symbol = symbol_short!("TOT_FEES");
 const ADMIN: Symbol = symbol_short!("ADMIN");
 
-/// Default platform fee in basis points (500 = 5%)
-const DEFAULT_PLATFORM_FEE_BPS: u32 = 500;
+// const DEFAULT_PLATFORM_FEE_BPS: u32 = 500;
 /// Maximum platform fee in basis points (10000 = 100%)
 const MAX_PLATFORM_FEE_BPS: u32 = 1000; // 10% max
-/// Current version of the contract for upgradeability
-const CURRENT_VERSION: u32 = 1;
+const MAX_TOTAL_RELEASE_WINDOW: u32 = 2592000; // 30 days
+// const CURRENT_VERSION: u32 = 1;
 
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -71,6 +72,8 @@ pub enum DataKey {
     ArtisanFeeTier(Address),
     /// Referral reward percentage in basis points
     ReferralRewardBps,
+    /// Re-entrancy guard key
+    ReentryGuard,
 }
 
 #[contracttype]
@@ -176,6 +179,17 @@ pub struct BatchEscrowCreatedEvent {
     pub seller: Address,
     pub amount: i128,
     pub token: Address,
+    pub timestamp: u64,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct EscrowExtendedEvent {
+    pub escrow_id: u64,
+    pub buyer: Address,
+    pub seller: Address,
+    pub new_release_window: u32,
+    pub additional_seconds: u32,
     pub timestamp: u64,
 }
 
@@ -361,6 +375,24 @@ impl EscrowContract {
         );
     }
 
+    fn emit_escrow_extended(env: &Env, event: EscrowExtendedEvent) {
+        env.events().publish(
+            (Symbol::new(env, "escrow_extended"), event.escrow_id),
+            event,
+        );
+    }
+
+    fn enter_reentry_guard(env: &Env) {
+        if env.storage().temporary().has(&DataKey::ReentryGuard) {
+            env.panic_with_error(Error::ReentryDetected);
+        }
+        env.storage().temporary().set(&DataKey::ReentryGuard, &true);
+    }
+
+    fn exit_reentry_guard(env: &Env) {
+        env.storage().temporary().remove(&DataKey::ReentryGuard);
+    }
+
     pub fn check_min_amount(env: &Env, token: Address, amount: i128) -> Result<(), Error> {
         if amount <= 0 {
             return Err(Error::AmountBelowMinimum);
@@ -480,6 +512,7 @@ impl EscrowContract {
         ipfs_hash: Option<String>,
         metadata_hash: Option<Bytes>,
     ) -> Escrow {
+        Self::enter_reentry_guard(&env);
         Self::check_not_paused(&env);
         buyer.require_auth();
 
@@ -566,6 +599,7 @@ impl EscrowContract {
         };
         Self::emit_escrow_created(&env, event);
 
+        Self::exit_reentry_guard(&env);
         escrow
     }
 
@@ -651,6 +685,7 @@ impl EscrowContract {
     /// # Arguments
     /// * `order_id` - Order identifier
     pub fn release_funds(env: Env, order_id: u32) {
+        Self::enter_reentry_guard(&env);
         let escrow_opt = env.storage().persistent().get(&(ESCROW, order_id));
         if !(escrow_opt.is_some()) {
             env.panic_with_error(Error::EscrowNotFound);
@@ -711,6 +746,7 @@ impl EscrowContract {
                 timestamp: env.ledger().timestamp(),
             },
         );
+        Self::exit_reentry_guard(&env);
     }
 
     /// Auto-release funds after release window (seller can call)
@@ -718,6 +754,7 @@ impl EscrowContract {
     /// # Arguments
     /// * `order_id` - Order identifier
     pub fn auto_release(env: Env, order_id: u32) {
+        Self::enter_reentry_guard(&env);
         let escrow_opt = env.storage().persistent().get(&(ESCROW, order_id));
         if !(escrow_opt.is_some()) {
             env.panic_with_error(Error::EscrowNotFound);
@@ -785,6 +822,58 @@ impl EscrowContract {
                 timestamp: env.ledger().timestamp(),
             },
         );
+        Self::exit_reentry_guard(&env);
+    }
+
+    /// Extend the release window for an escrow (only buyer can call)
+    ///
+    /// # Arguments
+    /// * `order_id` - Order identifier
+    /// * `additional_seconds` - Time in seconds to add to the release window
+    pub fn extend_release_window(env: Env, order_id: u32, additional_seconds: u32) {
+        Self::enter_reentry_guard(&env);
+        let escrow_key = (ESCROW, order_id);
+        let escrow_opt = env.storage().persistent().get(&escrow_key);
+
+        if !(escrow_opt.is_some()) {
+            env.panic_with_error(Error::EscrowNotFound);
+        }
+
+        env.storage().persistent().extend_ttl(&escrow_key, 1000, 518400);
+        let mut escrow: Escrow = escrow_opt.unwrap();
+
+        // Only buyer can extend release window
+        escrow.buyer.require_auth();
+
+        if !(escrow.status == EscrowStatus::Active) {
+            env.panic_with_error(Error::InvalidEscrowState);
+        }
+
+        let new_window = escrow
+            .release_window
+            .checked_add(additional_seconds)
+            .unwrap_or(u32::MAX);
+
+        if new_window > MAX_TOTAL_RELEASE_WINDOW {
+            env.panic_with_error(Error::ReleaseWindowTooLong);
+        }
+
+        escrow.release_window = new_window;
+        env.storage().persistent().set(&escrow_key, &escrow);
+
+        Self::emit_escrow_extended(
+            &env,
+            EscrowExtendedEvent {
+                escrow_id: order_id as u64,
+                buyer: escrow.buyer.clone(),
+                seller: escrow.seller.clone(),
+                new_release_window: new_window,
+                additional_seconds,
+                timestamp: env.ledger().timestamp(),
+            },
+        );
+
+        Self::exit_reentry_guard(&env);
     }
 
     /// Upgrade the contract's WASM code (admin only)
@@ -833,6 +922,7 @@ impl EscrowContract {
     /// # Arguments
     /// * `escrow_id` - Escrow/Order identifier
     pub fn refund(env: Env, escrow_id: u64) -> Result<(), Error> {
+        Self::enter_reentry_guard(&env);
         let admin = Self::get_admin(&env)?;
         admin.require_auth();
 
@@ -870,6 +960,7 @@ impl EscrowContract {
                 timestamp: env.ledger().timestamp(),
             },
         );
+        Self::exit_reentry_guard(&env);
         Ok(())
     }
 
@@ -1006,6 +1097,7 @@ impl EscrowContract {
 
     /// Resolve disputed escrow (arbitrator only)
     pub fn resolve_dispute(env: Env, order_id: u32, resolution: Resolution) {
+        Self::enter_reentry_guard(&env);
         let arbitrator = Self::get_arbitrator(&env);
         arbitrator.require_auth();
 
@@ -1044,6 +1136,7 @@ impl EscrowContract {
                 timestamp: env.ledger().timestamp(),
             },
         );
+        Self::exit_reentry_guard(&env);
     }
 
     /// Update platform fee percentage (admin only)
@@ -1277,6 +1370,7 @@ impl EscrowContract {
         batch_id: u64,
         escrows: soroban_sdk::Vec<EscrowCreateParams>,
     ) -> Result<soroban_sdk::Vec<u64>, Error> {
+        Self::enter_reentry_guard(&env);
         let mut results = soroban_sdk::Vec::new(&env);
 
         // Collect all params first for validation
@@ -1352,6 +1446,7 @@ impl EscrowContract {
         order_ids: soroban_sdk::Vec<u32>,
         authorized_address: Address,
     ) -> Result<soroban_sdk::Vec<u64>, Error> {
+        Self::enter_reentry_guard(&env);
         authorized_address.require_auth();
 
         let mut results = soroban_sdk::Vec::new(&env);
@@ -1451,12 +1546,12 @@ impl EscrowContract {
                             timestamp: env.ledger().timestamp(),
                         },
                     );
-
                     results.push_back(order_id as u64);
                 }
             }
         }
 
+        Self::exit_reentry_guard(&env);
         Ok(results)
     }
 
