@@ -769,7 +769,7 @@
             "data": {
               "vec": [
                 {
-                  "string": "caught panic 'User already onboarded' from contract function 'Symbol(obj#113)'"
+                  "string": "caught panic 'User already onboarded' from contract function 'Symbol(obj#129)'"
                 },
                 {
                   "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M"

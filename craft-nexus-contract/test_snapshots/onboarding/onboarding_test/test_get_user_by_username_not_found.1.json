@@ -450,7 +450,7 @@
             "data": {
               "vec": [
                 {
-                  "string": "caught panic 'Username not found' from contract function 'Symbol(obj#55)'"
+                  "string": "caught panic 'Username not found' from contract function 'Symbol(obj#63)'"
                 },
                 {
                   "string": "nonexistent"

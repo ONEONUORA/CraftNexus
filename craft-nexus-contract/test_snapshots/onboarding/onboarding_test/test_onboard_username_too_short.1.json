@@ -460,7 +460,7 @@
             "data": {
               "vec": [
                 {
-                  "string": "caught panic 'Username too short' from contract function 'Symbol(obj#57)'"
+                  "string": "caught panic 'Username too short' from contract function 'Symbol(obj#65)'"
                 },
                 {
                   "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M"

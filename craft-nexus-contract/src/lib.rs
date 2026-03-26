@@ -206,12 +206,16 @@ impl EscrowContract {
         };
         
         env.storage().persistent().set(&PLATFORM_FEE, &config);
+        env.storage().persistent().extend_ttl(&PLATFORM_FEE, 1000, 518400);
         env.storage().persistent().set(&PLATFORM_WALLET, &platform_wallet);
+        env.storage().persistent().extend_ttl(&PLATFORM_WALLET, 1000, 518400);
         env.storage().persistent().set(&ADMIN, &admin);
+        env.storage().persistent().extend_ttl(&ADMIN, 1000, 518400);
         
         // Initialize total fees to 0
         let zero: i128 = 0;
         env.storage().persistent().set(&TOTAL_FEES, &zero);
+        env.storage().persistent().extend_ttl(&TOTAL_FEES, 1000, 518400);
     }
     /// Create a new escrow for an order
     /// 
@@ -288,18 +292,21 @@ impl EscrowContract {
         env.storage()
             .persistent()
             .set(&(ESCROW, order_id), &escrow);
+        env.storage().persistent().extend_ttl(&(ESCROW, order_id), 1000, 518400);
 
         // Update buyer's escrow list for indexing
         let buyer_key = DataKey::BuyerEscrows(buyer.clone());
         let mut buyer_escrows: soroban_sdk::Vec<u64> = env.storage().persistent().get(&buyer_key).unwrap_or(soroban_sdk::Vec::new(&env));
         buyer_escrows.push_back(order_id as u64);
         env.storage().persistent().set(&buyer_key, &buyer_escrows);
+        env.storage().persistent().extend_ttl(&buyer_key, 1000, 518400);
 
         // Update seller's escrow list for indexing
         let seller_key = DataKey::SellerEscrows(seller.clone());
         let mut seller_escrows: soroban_sdk::Vec<u64> = env.storage().persistent().get(&seller_key).unwrap_or(soroban_sdk::Vec::new(&env));
         seller_escrows.push_back(order_id as u64);
         env.storage().persistent().set(&seller_key, &seller_escrows);
+        env.storage().persistent().extend_ttl(&seller_key, 1000, 518400);
 
         // Transfer funds from buyer to contract
         let client = token::Client::new(&env, &token);
@@ -330,6 +337,9 @@ impl EscrowContract {
         let key = DataKey::BuyerEscrows(buyer);
         let escrow_ids: soroban_sdk::Vec<u64> = env.storage().persistent().get(&key)
             .unwrap_or(soroban_sdk::Vec::new(&env));
+        if env.storage().persistent().has(&key) {
+            env.storage().persistent().extend_ttl(&key, 1000, 518400);
+        }
         
         let start = page * limit;
         let len = escrow_ids.len();
@@ -352,6 +362,9 @@ impl EscrowContract {
         let key = DataKey::SellerEscrows(seller);
         let escrow_ids: soroban_sdk::Vec<u64> = env.storage().persistent().get(&key)
             .unwrap_or(soroban_sdk::Vec::new(&env));
+        if env.storage().persistent().has(&key) {
+            env.storage().persistent().extend_ttl(&key, 1000, 518400);
+        }
         
         let start = page * limit;
         let len = escrow_ids.len();
@@ -370,6 +383,7 @@ impl EscrowContract {
             .persistent()
             .get(&PLATFORM_FEE);
         if !(config.is_some()) { env.panic_with_error(Error::PlatformNotInitialized); }
+        env.storage().persistent().extend_ttl(&PLATFORM_FEE, 1000, 518400);
         config.unwrap()
     }
 
@@ -388,6 +402,7 @@ impl EscrowContract {
             .persistent()
             .get(&(ESCROW, order_id));
         if !(escrow_opt.is_some()) { env.panic_with_error(Error::EscrowNotFound); }
+        env.storage().persistent().extend_ttl(&(ESCROW, order_id), 1000, 518400);
         let mut escrow: Escrow = escrow_opt.unwrap();
 
         // Only buyer can release funds
@@ -449,6 +464,7 @@ impl EscrowContract {
             .persistent()
             .get(&(ESCROW, order_id));
         if !(escrow_opt.is_some()) { env.panic_with_error(Error::EscrowNotFound); }
+        env.storage().persistent().extend_ttl(&(ESCROW, order_id), 1000, 518400);
         let mut escrow: Escrow = escrow_opt.unwrap();
 
         if !(escrow.status == EscrowStatus::Pending) { env.panic_with_error(Error::InvalidEscrowState); }
@@ -488,6 +504,7 @@ impl EscrowContract {
                 .unwrap_or(0);
             total_fees += fee_amount;
             env.storage().persistent().set(&TOTAL_FEES, &total_fees);
+            env.storage().persistent().extend_ttl(&TOTAL_FEES, 1000, 518400);
         }
         
         // Transfer remaining funds to seller
@@ -515,6 +532,7 @@ impl EscrowContract {
             .persistent()
             .get(&(ESCROW, order_id));
         if !(escrow_opt.is_some()) { env.panic_with_error(Error::EscrowNotFound); }
+        env.storage().persistent().extend_ttl(&(ESCROW, order_id), 1000, 518400);
         let mut escrow: Escrow = escrow_opt.unwrap();
 
         // Only buyer or platform can refund
@@ -553,6 +571,7 @@ impl EscrowContract {
             .persistent()
             .get(&(ESCROW, order_id));
         if !(escrow_opt.is_some()) { env.panic_with_error(Error::EscrowNotFound); }
+        env.storage().persistent().extend_ttl(&(ESCROW, order_id), 1000, 518400);
         escrow_opt.unwrap()
     }
 
@@ -575,6 +594,7 @@ impl EscrowContract {
             .persistent()
             .get(&(ESCROW, order_id));
         if !(escrow_opt.is_some()) { env.panic_with_error(Error::EscrowNotFound); }
+        env.storage().persistent().extend_ttl(&(ESCROW, order_id), 1000, 518400);
         let escrow: Escrow = escrow_opt.unwrap();
 
         if escrow.status != EscrowStatus::Pending {
@@ -600,6 +620,7 @@ impl EscrowContract {
             .persistent()
             .get(&(ESCROW, order_id));
         if !(escrow_opt.is_some()) { env.panic_with_error(Error::EscrowNotFound); }
+        env.storage().persistent().extend_ttl(&(ESCROW, order_id), 1000, 518400);
         let mut escrow: Escrow = escrow_opt.unwrap();
 
         let config = Self::get_platform_config(&env);
@@ -641,6 +662,7 @@ impl EscrowContract {
         };
         
         env.storage().persistent().set(&PLATFORM_FEE, &new_config);
+        env.storage().persistent().extend_ttl(&PLATFORM_FEE, 1000, 518400);
     }
 
     /// Update platform wallet address (admin only)
@@ -658,6 +680,7 @@ impl EscrowContract {
         };
         
         env.storage().persistent().set(&PLATFORM_FEE, &new_config);
+        env.storage().persistent().extend_ttl(&PLATFORM_FEE, 1000, 518400);
     }
 
     /// Get current platform fee percentage
@@ -674,10 +697,14 @@ impl EscrowContract {
 
     /// Get total fees collected by platform
     pub fn get_total_fees_collected(env: Env) -> i128 {
-        env.storage()
+        let fees = env.storage()
             .persistent()
             .get(&TOTAL_FEES)
-            .unwrap_or(0)
+            .unwrap_or(0);
+        if env.storage().persistent().has(&TOTAL_FEES) {
+            env.storage().persistent().extend_ttl(&TOTAL_FEES, 1000, 518400);
+        }
+        fees
     }
 
     /// Calculate the fee for a given amount (for display purposes)

@@ -460,7 +460,7 @@
             "data": {
               "vec": [
                 {
-                  "string": "caught panic 'Invalid role: can only onboard as Buyer or Artisan' from contract function 'Symbol(obj#57)'"
+                  "string": "caught panic 'Invalid role: can only onboard as Buyer or Artisan' from contract function 'Symbol(obj#65)'"
                 },
                 {
                   "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M"
