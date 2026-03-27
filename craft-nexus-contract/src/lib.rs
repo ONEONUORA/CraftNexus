@@ -141,7 +141,7 @@ pub struct Escrow {
     pub release_window: u32, // Time in seconds before auto-release
     pub created_at: u32,
     pub ipfs_hash: Option<String>,
-    pub metadata_hash: Option<BytesN<32>>,
+    pub metadata_hash: Option<Bytes>,
     pub dispute_reason: Option<String>,
     pub dispute_initiated_at: Option<u64>,
 }
@@ -157,7 +157,7 @@ pub struct EscrowCreatedEvent {
     pub release_window: u32,
     pub timestamp: u64,
     pub ipfs_hash: Option<String>,
-    pub metadata_hash: Option<BytesN<32>>,
+    pub metadata_hash: Option<Bytes>,
 }
 
 #[contracttype]
@@ -247,7 +247,7 @@ pub struct BatchFundsReleasedEvent {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct EscrowMetadata {
     pub ipfs_hash: Option<String>,
-    pub metadata_hash: Option<BytesN<32>>,
+    pub metadata_hash: Option<Bytes>,
 }
 
 #[contracttype]
@@ -268,7 +268,7 @@ pub struct EscrowCreateParams {
     pub order_id: u32,
     pub release_window: Option<u32>,
     pub ipfs_hash: Option<String>,
-    pub metadata_hash: Option<BytesN<32>>,
+    pub metadata_hash: Option<Bytes>,
 }
 
 /// Platform configuration data
@@ -593,7 +593,7 @@ impl EscrowContract {
         order_id: u32,
         release_window: Option<u32>,
         ipfs_hash: Option<String>,
-        metadata_hash: Option<BytesN<32>>,
+        metadata_hash: Option<Bytes>,
     ) -> Escrow {
         Self::enter_reentry_guard(&env);
         Self::check_not_paused(&env);
@@ -751,17 +751,21 @@ impl EscrowContract {
     }
 
     /// Get platform configuration
-    fn get_platform_config(env: &Env) -> PlatformConfig {
+    pub fn get_platform_config(env: Env) -> PlatformConfig {
+        Self::get_platform_config_internal(&env)
+    }
+
+    fn get_platform_config_internal(env: &Env) -> PlatformConfig {
         let config = env.storage().persistent().get(&PLATFORM_FEE);
         if !(config.is_some()) {
             env.panic_with_error(Error::PlatformNotInitialized);
         }
-        Self::extend_persistent(env, &PLATFORM_FEE);
+        Self::extend_persistent(&env, &PLATFORM_FEE);
         config.unwrap()
     }
 
     fn get_arbitrator(env: &Env) -> Address {
-        Self::get_platform_config(env).arbitrator
+        Self::get_platform_config_internal(env).arbitrator
     }
 
     /// Calculate platform fee for a given amount
