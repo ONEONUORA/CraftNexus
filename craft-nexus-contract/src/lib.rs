@@ -61,6 +61,8 @@ pub enum Error {
     ReentryDetected = 22,
     /// Release window is zero or negative
     ReleaseWindowTooShort = 23,
+    /// Staked funds can only be withdrawn in the original staking token
+    StakeTokenMismatch = 24,
 }
 
 const ESCROW: Symbol = symbol_short!("ESCROW");
@@ -105,6 +107,8 @@ pub enum DataKey {
     ReferralRewardBps,
     /// Staked token amount for an artisan
     ArtisanStake(Address),
+    /// Token address backing an artisan's staked balance
+    ArtisanStakeToken(Address),
     /// Timestamp when the stake cooldown ends for an artisan
     StakeCooldownEnd(Address),
     /// Partial refund proposal for a disputed order
@@ -2346,7 +2350,7 @@ impl EscrowContract {
             .dispute_initiated_at
             .ok_or(Error::InvalidEscrowState)?;
         let current_time = env.ledger().timestamp();
-        
+
         let config = Self::get_platform_config_internal(&env);
         if initiated_at + config.max_dispute_duration as u64 > current_time {
             return Err(Error::DisputeExpired);
@@ -2385,6 +2389,9 @@ impl EscrowContract {
     ///
     /// The artisan transfers `amount` of `token` to the contract. The stake is stored
     /// and a cooldown timer is set so the tokens cannot be unstaked immediately.
+    ///
+    /// Staked balances remain owned by the artisan. The contract does not accrue,
+    /// distribute, or sweep interest/yield from these reserved funds into platform fees.
     pub fn stake_tokens(env: Env, artisan: Address, token: Address, amount: i128) {
         artisan.require_auth();
 
@@ -2398,7 +2405,21 @@ impl EscrowContract {
 
         // Accumulate stake
         let stake_key = DataKey::ArtisanStake(artisan.clone());
+        let stake_token_key = DataKey::ArtisanStakeToken(artisan.clone());
         let current_stake: i128 = env.storage().persistent().get(&stake_key).unwrap_or(0);
+        if current_stake > 0 {
+            let staked_token: Address = env
+                .storage()
+                .persistent()
+                .get(&stake_token_key)
+                .expect("stake token must exist");
+            if staked_token != token {
+                env.panic_with_error(Error::StakeTokenMismatch);
+            }
+        } else {
+            env.storage().persistent().set(&stake_token_key, &token);
+            Self::extend_persistent(&env, &stake_token_key);
+        }
         env.storage()
             .persistent()
             .set(&stake_key, &(current_stake + amount));
@@ -2413,6 +2434,9 @@ impl EscrowContract {
     }
 
     /// Unstake previously staked tokens after the cooldown period has elapsed.
+    ///
+    /// Stakes can only be returned in the exact token originally deposited, which
+    /// prevents reserved artisan collateral from being treated as platform-managed fees.
     pub fn unstake_tokens(env: Env, artisan: Address, token: Address) {
         artisan.require_auth();
 
@@ -2424,14 +2448,24 @@ impl EscrowContract {
         }
 
         let stake_key = DataKey::ArtisanStake(artisan.clone());
+        let stake_token_key = DataKey::ArtisanStakeToken(artisan.clone());
         let stake: i128 = env.storage().persistent().get(&stake_key).unwrap_or(0);
+        let staked_token: Address = env
+            .storage()
+            .persistent()
+            .get(&stake_token_key)
+            .expect("stake token must exist");
 
         if stake <= 0 {
             env.panic_with_error(Error::AmountBelowMinimum);
         }
+        if staked_token != token {
+            env.panic_with_error(Error::StakeTokenMismatch);
+        }
 
-        // Clear stake and cooldown
+        // Clear stake metadata before returning the reserved artisan funds.
         env.storage().persistent().set(&stake_key, &0i128);
+        env.storage().persistent().remove(&stake_token_key);
         env.storage().persistent().remove(&cooldown_key);
 
         // Return tokens to artisan

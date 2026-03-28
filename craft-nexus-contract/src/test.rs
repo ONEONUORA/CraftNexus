@@ -1045,6 +1045,50 @@ fn test_fuzz_fee_and_net_amount_invariants() {
 }
 
 #[test]
+fn test_stake_and_unstake_same_token_succeeds() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, _, seller, token_id, token_admin, _, _) = setup_test(&env, true);
+
+    token_admin.mint(&seller, &20_000_000);
+    client.stake_tokens(&seller, &token_id, &5_000_000);
+    assert_eq!(client.get_stake(&seller), 5_000_000);
+
+    env.ledger().with_mut(|li| {
+        li.timestamp += DEFAULT_STAKE_COOLDOWN as u64 + 1;
+    });
+
+    client.unstake_tokens(&seller, &token_id);
+
+    let token_client = token::Client::new(&env, &token_id);
+    assert_eq!(client.get_stake(&seller), 0);
+    assert_eq!(token_client.balance(&seller), 20_000_000);
+}
+
+#[test]
+#[should_panic(expected = "Error(Contract, #24)")]
+fn test_unstake_rejects_different_token_than_original_stake() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, _, seller, token_id, token_admin, _, _) = setup_test(&env, true);
+
+    let other_token_admin = Address::generate(&env);
+    let other_token_contract = env.register_stellar_asset_contract_v2(other_token_admin.clone());
+    let other_token_admin_client =
+        token::StellarAssetClient::new(&env, &other_token_contract.address());
+
+    token_admin.mint(&seller, &10_000_000);
+    other_token_admin_client.mint(&seller, &10_000_000);
+    client.stake_tokens(&seller, &token_id, &5_000_000);
+
+    env.ledger().with_mut(|li| {
+        li.timestamp += DEFAULT_STAKE_COOLDOWN as u64 + 1;
+    });
+
+    client.unstake_tokens(&seller, &other_token_contract.address());
+}
+
+#[test]
 fn test_create_escrow_with_metadata_success_cid_v0() {
     let env = Env::default();
     env.mock_all_auths();
