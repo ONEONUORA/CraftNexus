@@ -1,4 +1,5 @@
 use super::*;
+use crate::Error;
 use soroban_sdk::{testutils::Address as _, Address, Env, String};
 
 fn setup_test(env: &Env) -> (OnboardingContractClient<'static>, Address) {
@@ -764,6 +765,7 @@ fn test_get_user_migrates_legacy_profile() {
         is_verified: false,
         successful_trades: 0,
         disputed_trades: 0,
+        portfolio_cid: None,
     };
 
     env.as_contract(&client.address, || {

@@ -36,10 +36,10 @@
                   "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M"
                 },
                 {
-                  "string": "test_user"
+                  "string": "artisan_john"
                 },
                 {
-                  "u32": 1
+                  "u32": 2
                 }
               ]
             }
@@ -50,18 +50,18 @@
     ],
     [
       [
-        "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4",
+        "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M",
         {
           "function": {
             "contract_fn": {
               "contract_address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
-              "function_name": "update_user_role",
+              "function_name": "update_portfolio",
               "args": [
                 {
                   "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M"
                 },
                 {
-                  "u32": 2
+                  "string": "bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi"
                 }
               ]
             }
@@ -359,7 +359,9 @@
                       "key": {
                         "symbol": "portfolio_cid"
                       },
-                      "val": "void"
+                      "val": {
+                        "string": "bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi"
+                      }
                     },
                     {
                       "key": {
@@ -390,7 +392,7 @@
                         "symbol": "username"
                       },
                       "val": {
-                        "string": "test_user"
+                        "string": "artisan_john"
                       }
                     },
                     {
@@ -465,7 +467,7 @@
                   "symbol": "Username"
                 },
                 {
-                  "string": "test_user"
+                  "string": "artisan_john"
                 }
               ]
             },
@@ -485,7 +487,7 @@
                       "symbol": "Username"
                     },
                     {
-                      "string": "test_user"
+                      "string": "artisan_john"
                     }
                   ]
                 },
@@ -568,7 +570,7 @@
       [
         {
           "contract_data": {
-            "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4",
+            "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M",
             "key": {
               "ledger_key_nonce": {
                 "nonce": 1033654523790656264
@@ -583,7 +585,7 @@
             "data": {
               "contract_data": {
                 "ext": "v0",
-                "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4",
+                "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M",
                 "key": {
                   "ledger_key_nonce": {
                     "nonce": 1033654523790656264
@@ -786,10 +788,10 @@
                   "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M"
                 },
                 {
-                  "string": "test_user"
+                  "string": "artisan_john"
                 },
                 {
-                  "u32": 1
+                  "u32": 2
                 }
               ]
             }
@@ -878,7 +880,7 @@
                     "symbol": "role"
                   },
                   "val": {
-                    "u32": 1
+                    "u32": 2
                   }
                 },
                 {
@@ -894,7 +896,7 @@
                     "symbol": "username"
                   },
                   "val": {
-                    "string": "test_user"
+                    "string": "artisan_john"
                   }
                 },
                 {
@@ -927,7 +929,7 @@
                 "bytes": "0000000000000000000000000000000000000000000000000000000000000001"
               },
               {
-                "symbol": "update_user_role"
+                "symbol": "update_portfolio"
               }
             ],
             "data": {
@@ -936,7 +938,7 @@
                   "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M"
                 },
                 {
-                  "u32": 2
+                  "string": "bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi"
                 }
               ]
             }
@@ -954,7 +956,7 @@
           "v0": {
             "topics": [
               {
-                "symbol": "RoleUpdated"
+                "symbol": "PortfolioUpdated"
               }
             ],
             "data": {
@@ -977,7 +979,7 @@
                 "symbol": "fn_return"
               },
               {
-                "symbol": "update_user_role"
+                "symbol": "update_portfolio"
               }
             ],
             "data": {
@@ -1010,7 +1012,9 @@
                   "key": {
                     "symbol": "portfolio_cid"
                   },
-                  "val": "void"
+                  "val": {
+                    "string": "bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi"
+                  }
                 },
                 {
                   "key": {
@@ -1041,7 +1045,7 @@
                     "symbol": "username"
                   },
                   "val": {
-                    "string": "test_user"
+                    "string": "artisan_john"
                   }
                 },
                 {

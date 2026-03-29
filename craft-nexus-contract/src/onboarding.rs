@@ -382,6 +382,7 @@ impl OnboardingContract {
             is_verified: legacy.is_verified,
             successful_trades: legacy.successful_trades,
             disputed_trades: legacy.disputed_trades,
+            portfolio_cid: legacy.portfolio_cid,
         };
         env.storage().persistent().set(&key, &upgraded);
         Self::extend_persistent(env, &key);

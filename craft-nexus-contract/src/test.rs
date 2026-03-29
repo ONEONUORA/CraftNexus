@@ -2452,11 +2452,11 @@ fn test_validate_batch_creation_rejects_invalid_metadata_hash_length() {
     let errors = client.validate_batch_creation(&batch_params);
 
     assert_eq!(errors.len(), 1);
-    assert_eq!(errors.get(0).unwrap(), Error::InvalidFee);
+    assert_eq!(errors.get(0).unwrap(), Error::InvalidMetadataHash);
 }
 
 #[test]
-#[should_panic(expected = "Error(Contract, #14)")]
+#[should_panic(expected = "Error(Contract, #27)")]
 fn test_validate_batch_creation_exceeds_limit() {
     let env = Env::default();
     env.mock_all_auths();
